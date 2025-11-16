@@ -1,0 +1,5 @@
+# receiver = \x14\x2B\x2F\xC5\xD8\x20
+# node1 = \x5C\x01\x3B\x4B\x41\xCC
+# node2 = 
+# {"node": 1, "temp": 30, "ts": 1861952, "hum": 71}
+# ESP32_C3 = \x58\x8C\x81\xAB\x2C\x90
