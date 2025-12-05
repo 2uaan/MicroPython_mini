@@ -1,0 +1,2 @@
+# Gateway -> Node: {id: 1, pump: 0, channel: 6}
+# Node -> Gateway: {id: 1, hum: 2500, pump: 0} 

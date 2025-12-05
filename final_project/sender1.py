@@ -49,8 +49,7 @@ except:
 
 
 #Change to Wifi channel
-wlan.config(channel = 11)
-print(wlan.config('channel'))
+wlan.config(channel = 1)
 
 
 #Send data loop

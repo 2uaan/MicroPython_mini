@@ -1,128 +1,96 @@
-# main.py - SLAVE (RECEIVER)
-
+from machine import Pin, I2C
+from lcd_api import I2C_LCD
 import network
 import espnow
 import time
-import json
-import machine
-from machine import Pin, I2C
-from lcd_api import I2C_LCD
+import esp32
 
-#Set up BUTTON
-button1 = Pin(32, Pin.IN, Pin.PULL_DOWN)
-button2 = Pin(33, Pin.IN, Pin.PULL_DOWN)
-flag_button1 = False
-flag_button2 = False
-last_press1 = 0
-last_press2 = 0 
-
-#SET UP LCD & LED
-I2C_ADDRESS = 0x27
-SCL_PIN = Pin(21)
-SDA_PIN = Pin(22)
-i2c = I2C(0, scl = SCL_PIN, sda = SDA_PIN, freq = 400000)
-lcd = I2C_LCD(i2c, I2C_ADDRESS)
-lcd.display_str('----', 6,0)
-lcd.display_str('----', 6,1)
-
-DRY_VALUE = 3000
-WET_VALUE = 1100
-DISTANCE = DRY_VALUE - WET_VALUE
-
-
-led = Pin(2, Pin.OUT)
-led.value(0)
-
-NODE2_MAC_ADDRESS = b'\x88\x57\x21\x69\xf0\x20'
-NODE1_MAC_ADDRESS = b'\x5C\x01\x3B\x4B\x41\xCC'
-
-def blink(duration = 200):
-    led.value(1)
-    time.sleep_ms(duration)
-    led.value(0)
-
-#Set up network and ESP-NOW
 wlan = network.WLAN(network.STA_IF)
 wlan.active(True)
 e = espnow.ESPNow()
 e.active(True)
 
-def adc_to_percent(adc):
-    percent = (DISTANCE - adc + WET_VALUE) * 100 // DISTANCE
-    return percent
+SSID = '12B05'
+PASS = '11111112'
+NODE2_MAC_ADDRESS = b'\x88\x57\x21\x69\xf0\x20'
+NODE1_MAC_ADDRESS = b'\x5C\x01\x3B\x4B\x41\xCC'
+
+
+I2C_ADDRESS = 0x27
+SCL_PIN = Pin(21)
+SDA_PIN = Pin(22)
+
+i2c = I2C(0, scl = SCL_PIN, sda = SDA_PIN, freq = 400000)
+lcd = I2C_LCD(i2c, I2C_ADDRESS)
+
+
+original_channel = wlan.config('channel')
+wifi_channel = 0
+lcd.display_str(f'{original_channel}', 0,0)
+
+
+wait = 15
+if not wlan.isconnected():
+    print('--Connet Wi-Fi--')
+    wlan.connect(SSID, PASS)
+    while not wlan.isconnected() and wait > 0:
+        print('.')
+        wait -= 1
+        time.sleep(1)
+    
+if wlan.isconnected():
+    wifi_channel = wlan.config('channel')
+    lcd.display_str(f'{wifi_channel}', 0, 1)
+else: lcd.display_str('Error', 0, 1)
 
 try:
     e.add_peer(NODE1_MAC_ADDRESS)
+    print('[ADD_PEER]: Node1 success!!')
     e.add_peer(NODE2_MAC_ADDRESS)
+    print('[ADD_PEER]: Node2 success!!')
 except:
-    print('Error when add MAC address!!!')
+    print('#*# Add new peer ERROR!!!')
 
-#Interrupt for toggle LED
-def led1(pin):
-    global last_press1, flag_button1
-    now = time.ticks_ms()
-    if time.ticks_diff(now, last_press1) > 200:
-        flag_button1 = True
-
-button1.irq(trigger= Pin.IRQ_FALLING, handler= led1)
-
-def led2(pin):
-    global last_press2, flag_button2
-    now = time.ticks_ms()
-    if time.ticks_diff(now, last_press1) > 200:
-        flag_button2 = True
-
-button2.irq(trigger= Pin.IRQ_FALLING, handler= led2)
-
+wlan.disconnect()
+wlan.config(channel = original_channel)
+print(wlan.config('channel'))
 
 while True:
-    host, msg = e.recv(10) # Wait for receive
+    mess = f'{wifi_channel}'
     
-    if msg:
-#         receive_ts = time.ticks_ms()
-        blink()
-        data = msg.decode()
-        data_json = json.loads(data)
-#         delay_time = receive_ts - data_json.get('ts')
+    try:
+        e.send(NODE1_MAC_ADDRESS, mess.encode())
+        print(f'[DATA]: Send {mess} successed!!!')
+    except:
+        print('[ERROR]: Send {mess} failed!!')
         
-        
-        if host == NODE1_MAC_ADDRESS:
-            lcd.display_str(f'N1    H:{adc_to_percent(data_json.get('hum'))}%  ', 0, 0)
-            print(f'Received from node 1: {data}')
-#             print(f'Delay: {delay_time}')
-            
-        if host == NODE2_MAC_ADDRESS:
-            lcd.display_str(f'N1 H:{adc_to_percent(data_json.get('hum'))}% ', 0, 1)
-            print(f'Received from node 2: {data}')
-#             print(f'Delay: {delay_time}')
+    node, reply = e.recv(20)
     
-#     irq_state = machine.disable_irq() 
-#     if flag_button1:
-#         flag_button1 = False # Hạ cờ ngay lập tức
-#         machine.enable_irq(irq_state) 
-#         print("-> Phat hien Nut 1! Dang gui lenh cho Sender 1...")
-#         try:
-#             e.send(NODE1_MAC_ADDRESS, b'change_LED_state')
-#         except OSError as e:
-#             print(f"Loi gui lenh cho S1: {e}")
-# 
-#     else:
-#         machine.enable_irq(irq_state)
-#         
-#     irq_state = machine.disable_irq() 
-#     if flag_button2:
-#         flag_button2 = False # Hạ cờ ngay lập tức
-#         machine.enable_irq(irq_state) 
-#         print("-> Phat hien Nut 2! Dang gui lenh cho Sender 2...")
-#         try:
-#             e.send(NODE2_MAC_ADDRESS, b'change_LED_state')
-#         except OSError as e:
-#             print(f"Loi gui lenh cho S2: {e}")
-# 
-#     else:
-#         machine.enable_irq(irq_state) 
-          
+    if reply:
+        print(reply.decode())
+        break
+    else: print('No reply')
         
+        
+    time.sleep(1)
 
+print('Channel data send success!!')
+lcd.clear()
 
+wait = 15
+if not wlan.isconnected():
+    print('--Reconnet Wi-Fi--')
+    wlan.connect(SSID, PASS)
+    while not wlan.isconnected() and wait > 0:
+        print('.')
+        wait -= 1
+        time.sleep(1)
 
+while True:
+    node, data = e.recv(1000)
+    
+    if data:
+        print(f'[DATA]: Received {data.decode()}')
+        lcd.display_str(f'{data.decode()}', 0, 0)
+
+    
